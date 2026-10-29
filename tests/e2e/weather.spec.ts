@@ -1,76 +1,137 @@
-import { test, expect, type Page } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
-const geocoding = {
-  results: [
-    {
-      id: 1,
-      name: 'Seattle',
-      country: 'Estados Unidos',
-      admin1: 'Washington',
-      latitude: 47.6,
-      longitude: -122.33,
-    },
-  ],
+const city = {
+  id: 3390760,
+  name: 'Recife',
+  latitude: -8.0539,
+  longitude: -34.8811,
+  admin1: 'Pernambuco',
+  country: 'Brasil',
+  timezone: 'America/Recife',
 };
 
-const forecast = {
-  current: {
-    time: '2026-06-16T12:00',
-    temperature_2m: 0,
-    relative_humidity_2m: 80,
-    wind_speed_10m: 10,
-    surface_pressure: 1015,
-    precipitation: 0,
-    weather_code: 3,
-  },
-  daily: {
-    time: ['2026-06-16', '2026-06-17', '2026-06-18', '2026-06-19', '2026-06-20'],
-    weather_code: [3, 61, 80, 1, 0],
-    temperature_2m_max: [20, 19, 22, 24, 25],
-    temperature_2m_min: [12, 11, 13, 14, 15],
-    precipitation_probability_max: [20, 90, 70, 10, 0],
-  },
-};
+async function mockForecastApi(page: Page) {
+  await page.route('**/v1/search**', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ results: [city] }),
+    });
+  });
 
-async function mockApis(page: Page) {
-  await page.route('**/geocoding-api.open-meteo.com/**', (route) =>
-    route.fulfill({ json: geocoding }),
-  );
-  await page.route('**/api.open-meteo.com/**', (route) => route.fulfill({ json: forecast }));
+  await page.route('**/v1/forecast**', async (route) => {
+    const requestUrl = new URL(route.request().url());
+    expect(requestUrl.searchParams.get('latitude')).toBe(String(city.latitude));
+    expect(requestUrl.searchParams.get('longitude')).toBe(String(city.longitude));
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        timezone: 'America/Recife',
+        current_units: {
+          time: 'iso8601',
+          temperature_2m: '°C',
+          apparent_temperature: '°C',
+          relative_humidity_2m: '%',
+          weather_code: 'wmo code',
+          wind_speed_10m: 'km/h',
+          precipitation: 'mm',
+          surface_pressure: 'hPa',
+        },
+        daily_units: {
+          time: 'iso8601',
+          weather_code: 'wmo code',
+          temperature_2m_min: '°C',
+          temperature_2m_max: '°C',
+          precipitation_probability_max: '%',
+        },
+        current: {
+          time: '2026-10-29T12:00',
+          temperature_2m: 0,
+          apparent_temperature: -1,
+          relative_humidity_2m: 70,
+          weather_code: 3,
+          wind_speed_10m: 10,
+          precipitation: 0,
+          surface_pressure: 1012,
+        },
+        daily: {
+          time: ['2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02'],
+          weather_code: [3, 1, 61, 2, 0],
+          temperature_2m_min: [-2, 0, 1, 2, 3],
+          temperature_2m_max: [0, 2, 3, 4, 5],
+          precipitation_probability_max: [0, 10, 70, 20, 5],
+        },
+      }),
+    });
+  });
 }
 
-test('fluxo completo: buscar → clima atual → previsão → trocar unidade', async ({ page }) => {
-  await mockApis(page);
+test('searches, renders a five-day forecast, and converts 0°C to 32°F', async ({ page }) => {
+  await mockForecastApi(page);
   await page.goto('/');
 
-  await page.getByLabel(/buscar cidade/i).fill('Seattle');
-  await page.getByRole('button', { name: /buscar/i }).click();
+  await page.getByRole('searchbox', { name: 'Buscar cidade' }).fill('Recife');
+  await page.getByRole('button', { name: 'Buscar' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Seattle' })).toBeVisible();
-  await expect(page.getByRole('region', { name: /previsão de 5 dias/i })).toBeVisible();
+  const cityResult = page.getByRole('button', { name: /Recife.*Pernambuco.*Brasil/ });
+  await expect(cityResult).toBeVisible();
+  await cityResult.click();
+  await expect(page.getByRole('heading', { name: 'Recife' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Previsão de 5 dias' })).toBeVisible();
+  await expect(page.getByRole('listitem')).toHaveCount(5);
 
-  // 0°C exibido; após trocar para °F deve virar 32°.
-  await expect(page.getByText('0°').first()).toBeVisible();
-  await page.getByRole('button', { name: '°F' }).click();
-  await expect(page.getByText('32°').first()).toBeVisible();
+  await page
+    .getByRole('group', { name: 'Unidade de temperatura' })
+    .getByRole('button', { name: '°F' })
+    .click();
+  await expect(page.getByRole('group', { name: 'Temperatura: 32 °F' })).toBeVisible();
+
+  await page.reload();
+  expect(await page.evaluate(() => localStorage.length === 0 && sessionStorage.length === 0)).toBe(
+    true,
+  );
+  await page.getByRole('searchbox', { name: 'Buscar cidade' }).fill('Recife');
+  await page.getByRole('button', { name: 'Buscar' }).click();
+  await expect(page.getByRole('group', { name: 'Temperatura: 0 °C' })).toBeVisible();
+  await expect(
+    page.getByRole('group', { name: 'Unidade de temperatura' }).getByRole('button', { name: '°C' }),
+  ).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('estado vazio quando a cidade não existe', async ({ page }) => {
-  await page.route('**/geocoding-api.open-meteo.com/**', (route) => route.fulfill({ json: {} }));
+test('shows the empty message when geocoding returns no results', async ({ page }) => {
+  let forecastRequests = 0;
+  await page.route('**/v1/search**', (route) =>
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify({}) }),
+  );
+  await page.route('**/v1/forecast**', (route) => {
+    forecastRequests += 1;
+    return route.fulfill({ status: 500, body: '' });
+  });
   await page.goto('/');
 
-  await page.getByLabel(/buscar cidade/i).fill('xyzxyz');
-  await page.getByRole('button', { name: /buscar/i }).click();
+  await page.getByRole('searchbox', { name: 'Buscar cidade' }).fill('Londres');
+  await page.getByRole('button', { name: 'Buscar' }).click();
 
-  await expect(page.getByText(/nenhuma cidade encontrada/i)).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('Nenhuma cidade encontrada');
+  expect(forecastRequests).toBe(0);
 });
 
-test('viewport mobile renderiza o fluxo principal', async ({ page }) => {
-  await mockApis(page);
+test('renders the primary weather flow at a 375x812 mobile viewport', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
+  await mockForecastApi(page);
   await page.goto('/');
 
-  await page.getByLabel(/buscar cidade/i).fill('Seattle');
-  await page.getByRole('button', { name: /buscar/i }).click();
-  await expect(page.getByRole('heading', { name: 'Seattle' })).toBeVisible();
+  await page.getByRole('searchbox', { name: 'Buscar cidade' }).fill('Recife');
+  await page.getByRole('button', { name: 'Buscar' }).click();
+
+  await expect(page.getByRole('button', { name: /Recife.*Pernambuco.*Brasil/ })).toBeVisible();
+  await page.getByRole('button', { name: /Recife.*Pernambuco.*Brasil/ }).click();
+  await expect(page.getByRole('heading', { name: 'Recife' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Previsão de 5 dias' })).toBeVisible();
+  await expect(page.getByRole('listitem')).toHaveCount(5);
+  await expect(page.getByRole('group', { name: 'Temperatura: 0 °C' })).toBeVisible();
+
+  const documentOverflowsHorizontally = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  );
+  expect(documentOverflowsHorizontally).toBe(false);
 });
