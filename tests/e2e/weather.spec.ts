@@ -76,8 +76,9 @@ test('searches, renders a five-day forecast, and converts 0°C to 32°F', async 
   await expect(cityResult).toBeVisible();
   await cityResult.click();
   await expect(page.getByRole('heading', { name: 'Recife' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Previsão de 5 dias' })).toBeVisible();
-  await expect(page.getByRole('listitem')).toHaveCount(5);
+  const forecast = page.getByRole('region', { name: 'Previsão de 5 dias' });
+  await expect(forecast).toBeVisible();
+  await expect(forecast.getByRole('listitem')).toHaveCount(5);
 
   await page
     .getByRole('group', { name: 'Unidade de temperatura' })
@@ -126,8 +127,9 @@ test('renders the primary weather flow at a 375x812 mobile viewport', async ({ p
   await expect(page.getByRole('button', { name: /Recife.*Pernambuco.*Brasil/ })).toBeVisible();
   await page.getByRole('button', { name: /Recife.*Pernambuco.*Brasil/ }).click();
   await expect(page.getByRole('heading', { name: 'Recife' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Previsão de 5 dias' })).toBeVisible();
-  await expect(page.getByRole('listitem')).toHaveCount(5);
+  const forecast = page.getByRole('region', { name: 'Previsão de 5 dias' });
+  await expect(forecast).toBeVisible();
+  await expect(forecast.getByRole('listitem')).toHaveCount(5);
   await expect(page.getByRole('group', { name: 'Temperatura: 0 °C' })).toBeVisible();
 
   const documentOverflowsHorizontally = await page.evaluate(

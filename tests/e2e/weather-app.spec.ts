@@ -90,7 +90,9 @@ test('completes search, forecast, and unit toggle at 320px without horizontal ov
   await expect(cityResult).toBeVisible();
   await cityResult.click();
   await expect(page.getByRole('heading', { name: 'Recife' })).toBeVisible();
-  await expect(page.getByRole('listitem')).toHaveCount(5);
+  const forecast = page.getByRole('region', { name: 'Previsão de 5 dias' });
+  await expect(forecast).toBeVisible();
+  await expect(forecast.getByRole('listitem')).toHaveCount(5);
   expect(forecastRequestCount()).toBe(1);
   await page
     .getByRole('group', { name: 'Unidade de temperatura' })
