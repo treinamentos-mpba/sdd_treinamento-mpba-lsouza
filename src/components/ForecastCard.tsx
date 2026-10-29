@@ -20,7 +20,7 @@ export default function ForecastCard({ day, index, unit }: ForecastCardProps) {
         <span role="img" aria-label={weather.label} className="mt-4 block text-3xl leading-none">
           {weather.icon}
         </span>
-        <p className="mt-3 text-sm text-white/80">{weather.label}</p>
+        <p className="mt-3 break-words text-sm text-white/80">{weather.label}</p>
         <p className="mt-4 text-sm font-semibold text-white">
           Máx. {formatTemperature(day.temperatureMaxC, unit)}
         </p>
