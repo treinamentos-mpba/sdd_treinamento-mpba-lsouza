@@ -92,6 +92,7 @@ test('searches, renders a five-day forecast, and converts 0°C to 32°F', async 
   );
   await page.getByRole('searchbox', { name: 'Buscar cidade' }).fill('Recife');
   await page.getByRole('button', { name: 'Buscar' }).click();
+  await page.getByRole('button', { name: /Recife.*Pernambuco.*Brasil/ }).click();
   await expect(page.getByRole('group', { name: 'Temperatura: 0 °C' })).toBeVisible();
   await expect(
     page.getByRole('group', { name: 'Unidade de temperatura' }).getByRole('button', { name: '°C' }),
